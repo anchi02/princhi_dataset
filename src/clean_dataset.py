@@ -6,55 +6,60 @@ from scipy.signal import butter, filtfilt
 # load dataset
 # ----------------------------------------
 
-df = pd.read_csv("data/dataset_cleaned.csv")
+df = pd.read_csv("data/data_collect1.csv")
 
 # ----------------------------------------
-# rename columns
+# sort by timestamp
 # ----------------------------------------
 
-df.columns = [
-    "timestamp",
-    "ecg",
-    "lead_status",
-    "ir",
-    "body_temp",
-    "accel_x",
-    "accel_y",
-    "accel_z",
-    "gyro_x",
-    "gyro_y",
-    "gyro_z"
-]
-
-# ----------------------------------------
-# convert timestamp
-# ----------------------------------------
-
-df["timestamp"] = pd.to_datetime(df["timestamp"])
-
-df["time_sec"] = (
-    df["timestamp"] - df["timestamp"].iloc[0]
-).dt.total_seconds()
+df = df.sort_values("timestamp_us")
 
 # ----------------------------------------
 # remove duplicate timestamps
 # ----------------------------------------
 
-df = df.drop_duplicates(subset="timestamp")
+df = df.drop_duplicates(subset="timestamp_us")
+
+# ----------------------------------------
+# create time in seconds
+# ----------------------------------------
+
+df["time_sec"] = (
+    df["timestamp_us"] - df["timestamp_us"].iloc[0]
+) / 1_000_000
+
+# ----------------------------------------
+# estimate sampling frequency
+# ----------------------------------------
+
+sampling_intervals = np.diff(df["time_sec"])
+
+sampling_intervals = sampling_intervals[
+    sampling_intervals > 0
+]
+
+if len(sampling_intervals) == 0:
+    raise ValueError(
+        "cannot estimate sampling frequency"
+    )
+
+fs = 1 / np.mean(sampling_intervals)
+
+print("sampling frequency:", fs)
 
 # ----------------------------------------
 # remove disconnected leads
 # ----------------------------------------
 
-df = df[df["lead_status"] == 1]
+df = df[df["leads"] == 1]
 
 # ----------------------------------------
 # remove invalid temperature values
 # ----------------------------------------
 
 df = df[
-    (df["body_temp"] > 20) &
-    (df["body_temp"] < 45)
+    (df["temp"] > 20) &
+    (df["temp"] < 45)
 ]
 
 # ----------------------------------------
@@ -64,19 +69,19 @@ df = df[
 df = df.dropna()
 
 # ----------------------------------------
-# remove outliers using IQR
+# clip outliers instead of deleting rows
 # ----------------------------------------
 
 numeric_cols = [
     "ecg",
     "ir",
-    "body_temp",
-    "accel_x",
-    "accel_y",
-    "accel_z",
-    "gyro_x",
-    "gyro_y",
-    "gyro_z"
+    "temp",
+    "accX",
+    "accY",
+    "accZ",
+    "gyroX",
+    "gyroY",
+    "gyroZ"
 ]
 
 for col in numeric_cols:
@@ -89,31 +94,43 @@ for col in numeric_cols:
     lower = q1 - 1.5 * iqr
     upper = q3 + 1.5 * iqr
 
-    df = df[
-        (df[col] >= lower) &
-        (df[col] <= upper)
-    ]
+    df[col] = df[col].clip(
+        lower,
+        upper
+    )
 
 # ----------------------------------------
-# estimate sampling frequency
+# ensure enough samples
 # ----------------------------------------
 
-sampling_intervals = np.diff(df["time_sec"])
-
-fs = 1 / np.mean(sampling_intervals)
-
-print("sampling frequency:", fs)
+if len(df) < 20:
+    raise ValueError(
+        "too few samples after cleaning"
+    )
 
 # ----------------------------------------
 # bandpass filter functions
 # ----------------------------------------
 
-def butter_bandpass(lowcut, highcut, fs, order=4):
+def butter_bandpass(
+    lowcut,
+    highcut,
+    fs,
+    order=4
+):
 
     nyquist = 0.5 * fs
 
     low = lowcut / nyquist
     high = highcut / nyquist
+
+    if high >= 1:
+        high = 0.99
+
+    if low >= high:
+        raise ValueError(
+            "invalid filter frequencies"
+        )
 
     b, a = butter(
         order,
@@ -124,7 +141,12 @@ def butter_bandpass(lowcut, highcut, fs, order=4):
     return b, a
 
 
-def apply_filter(signal, lowcut, highcut, fs):
+def apply_filter(
+    signal,
+    lowcut,
+    highcut,
+    fs
+):
 
     b, a = butter_bandpass(
         lowcut,
@@ -132,12 +154,14 @@ def apply_filter(signal, lowcut, highcut, fs):
         fs
     )
 
-    filtered = filtfilt(b, a, signal)
-
-    return filtered
+    return filtfilt(
+        b,
+        a,
+        signal
+    )
 
 # ----------------------------------------
-# filter ecg
+# filter ECG
 # ----------------------------------------
 
 df["ecg_filtered"] = apply_filter(
@@ -148,7 +172,7 @@ df["ecg_filtered"] = apply_filter(
 )
 
 # ----------------------------------------
-# filter ppg
+# filter PPG
 # ----------------------------------------
 
 df["ppg_filtered"] = apply_filter(
@@ -163,15 +187,15 @@ df["ppg_filtered"] = apply_filter(
 # ----------------------------------------
 
 df["accel_magnitude"] = np.sqrt(
-    df["accel_x"]**2 +
-    df["accel_y"]**2 +
-    df["accel_z"]**2
+    df["accX"]**2 +
+    df["accY"]**2 +
+    df["accZ"]**2
 )
 
 df["gyro_magnitude"] = np.sqrt(
-    df["gyro_x"]**2 +
-    df["gyro_y"]**2 +
-    df["gyro_z"]**2
+    df["gyroX"]**2 +
+    df["gyroY"]**2 +
+    df["gyroZ"]**2
 )
 
 # ----------------------------------------
@@ -180,9 +204,13 @@ df["gyro_magnitude"] = np.sqrt(
 
 def normalize(x):
 
+    std = np.std(x)
+
+    if std == 0:
+        return np.zeros(len(x))
+
     return (
-        (x - np.mean(x)) /
-        np.std(x)
+        (x - np.mean(x)) / std
     )
 
 df["ecg_norm"] = normalize(
@@ -202,5 +230,10 @@ df.to_csv(
     index=False
 )
 
+# ----------------------------------------
+# done
+# ----------------------------------------
+
 print("cleaning complete")
 print(df.head())
+print("final rows:", len(df))
