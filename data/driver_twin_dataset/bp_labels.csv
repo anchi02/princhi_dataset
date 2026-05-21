@@ -1,0 +1,33 @@
+session_id,timestamp,sbp,dbp,condition,notes
+session_001,2026-05-20 15:34:27,113,81,normal,sit
+session_002,2026-05-20 15:38:35,124,84,normal ,sit
+session_003,2026-05-20 15:40:55,114,80,normal,sit
+session_004,2026-05-20 15:43:16,117,81,normal,sit
+session_005,2026-05-20 15:46:59,108,77,normal,sit
+session_006,2026-05-20 15:54:50,128,82,normal,hot weather
+session_007,2026-05-20 16:02:55,120,85,normal,hot weather
+session_008,2026-05-20 16:05:21,119,76,normal,sit
+session_009,2026-05-20 16:07:44,124,81,normal ,hot weather
+session_010,2026-05-20 16:10:11,131,86,little exhausted,hot weather
+session_011,2026-05-20 17:58:44,156,96,little tired,hot weather
+session_012,2026-05-20 18:07:34,137,89,moderate stress,hot weather and walking
+session_013,2026-05-20 22:03:28,119,81,normal,relax
+session_014,2026-05-20 22:09:28,116,81,normal,relax
+session_015,2026-05-20 22:13:26,113,77,normal,relax
+session_016,2026-05-20 22:19:30,122,80,normal,relax
+session_017,2026-05-20 22:22:09,119,83,normal,sit
+session_018,2026-05-20 22:24:24,116,75,normal,relax sit
+session_019,2026-05-20 22:31:17,121,81,normal,sit
+session_020,2026-05-20 22:33:34,122,85,normal,working sitting
+session_021,2026-05-20 22:36:38,113,83,normal,sitting working
+session_023,2026-05-21 00:23:18,120,73,normal,after food
+session_023,2026-05-21 00:47:41,123,83,sitting,after food
+session_024,2026-05-21 00:50:36,116,80,rest,after food
+session_025,2026-05-21 00:59:56,114,81,rest,after food
+session_026,2026-05-21 01:05:24,120,85,normal,after food
+session_027,2026-05-21 01:12:09,107,73,normal,rest
+session_028,2026-05-21 01:14:50,122,81,normal,sitting rest
+session_029,2026-05-21 01:19:21,113,77,normal,relax
+session_030,2026-05-21 01:23:07,112,75,normal,relax
+session_031,2026-05-21 08:27:33,103,77,rested,morning empty stomach
+session_032,2026-05-21 08:57:34,121,84,rested,morning empty stomach

@@ -1,330 +1,567 @@
 import pandas as pd
 import numpy as np
-from scipy.signal import find_peaks
 
-# ----------------------------------------
-# load dataset
-# ----------------------------------------
-
-df = pd.read_csv("data/cleaned_output.csv")
-
-# ----------------------------------------
-# signals
-# ----------------------------------------
-
-time = df["time_sec"].values
-
-ecg = df["ecg_filtered"].values
-ppg = df["ppg_filtered"].values
-
-accel = df["accel_magnitude"].values
-gyro = df["gyro_magnitude"].values
-
-temp_signal = df["temp"].values
-
-# ----------------------------------------
-# estimate sampling frequency
-# ----------------------------------------
-
-fs = 1 / np.mean(np.diff(time))
-
-print(f"sampling frequency: {fs:.2f} Hz")
-
-# ----------------------------------------
-# window settings
-# ----------------------------------------
-
-window_sec = 5
-overlap = 0.5
-
-window_samples = int(window_sec * fs)
-
-step_size = int(
-    window_samples * (1 - overlap)
+from scipy.signal import (
+    find_peaks,
+    savgol_filter
 )
 
-# ----------------------------------------
-# feature rows
-# ----------------------------------------
+from pathlib import Path
 
-feature_rows = []
+# =====================================================
+# BASE DIRECTORY
+# =====================================================
 
-# ----------------------------------------
-# process each window
-# ----------------------------------------
+BASE_DIR = Path("data")
 
-for start in range(
-    0,
-    len(df) - window_samples,
-    step_size
-):
+# =====================================================
+# DATASET FOLDERS
+# =====================================================
 
-    end = start + window_samples
+dataset_dirs = [
 
-    # ----------------------------------------
-    # extract window
-    # ----------------------------------------
+    folder for folder in BASE_DIR.iterdir()
 
-    t_win = time[start:end]
+    if (
+        folder.is_dir() and
+        folder.name.startswith(
+            "driver_twin_dataset"
+        )
+    )
+]
 
-    ecg_win = ecg[start:end]
-    ppg_win = ppg[start:end]
+print(f"\nfound {len(dataset_dirs)} datasets\n")
 
-    accel_win = accel[start:end]
-    gyro_win = gyro[start:end]
+# =====================================================
+# PROCESS DATASETS
+# =====================================================
 
-    temp_win = temp_signal[start:end]
+for dataset_dir in dataset_dirs:
 
-    # ----------------------------------------
-    # ECG peak detection
-    # ----------------------------------------
+    print("\n================================")
+    print(dataset_dir.name)
+    print("================================")
 
-    ecg_distance = int(fs * 0.25)
-
-    ecg_peaks, _ = find_peaks(
-        ecg_win,
-        distance=max(1, ecg_distance),
-        prominence=np.std(ecg_win) * 0.5
+    processed_raw_dir = (
+        dataset_dir / "processed_raw"
     )
 
-    # ----------------------------------------
-    # PPG peak detection
-    # ----------------------------------------
+    if not processed_raw_dir.exists():
+        continue
 
-    ppg_distance = int(fs * 0.4)
-
-    ppg_peaks, _ = find_peaks(
-        ppg_win,
-        distance=max(1, ppg_distance),
-        prominence=np.std(ppg_win) * 0.3
+    output_dir = (
+        dataset_dir / "feature_data"
     )
 
-    # ----------------------------------------
-    # skip bad windows
-    # ----------------------------------------
-
-    if len(ecg_peaks) < 2:
-        continue
-
-    if len(ppg_peaks) < 2:
-        continue
-
-    # ----------------------------------------
-    # peak times
-    # ----------------------------------------
-
-    ecg_peak_times = t_win[ecg_peaks]
-    ppg_peak_times = t_win[ppg_peaks]
-
-    # ----------------------------------------
-    # PAT calculation
-    # ----------------------------------------
-
-    pat_values = []
-
-    for r_time in ecg_peak_times:
-
-        future_ppg = ppg_peak_times[
-            ppg_peak_times > r_time
-        ]
-
-        if len(future_ppg) == 0:
-            continue
-
-        ppg_time = future_ppg[0]
-
-        pat = (
-            ppg_time - r_time
-        ) * 1000
-
-        if 50 < pat < 400:
-            pat_values.append(pat)
-
-    # ----------------------------------------
-    # skip if no valid PAT
-    # ----------------------------------------
-
-    if len(pat_values) == 0:
-        continue
-
-    # ----------------------------------------
-    # heart rate
-    # ----------------------------------------
-
-    rr_intervals = np.diff(
-        ecg_peak_times
+    output_dir.mkdir(
+        parents=True,
+        exist_ok=True
     )
 
-    if len(rr_intervals) == 0:
-        continue
-
-    heart_rates = 60 / rr_intervals
-
-    heart_rate = np.mean(
-        heart_rates
+    processed_files = list(
+        processed_raw_dir.glob("*.csv")
     )
 
-    # ----------------------------------------
-    # HRV
-    # ----------------------------------------
+    for processed_file in processed_files:
 
-    rr_ms = rr_intervals * 1000
+        try:
 
-    sdnn = np.std(rr_ms)
-
-    if len(rr_ms) > 1:
-
-        rmssd = np.sqrt(
-            np.mean(
-                np.diff(rr_ms) ** 2
+            print(
+                f"\nprocessing: "
+                f"{processed_file.name}"
             )
-        )
 
-    else:
-        rmssd = 0
+            # =========================================
+            # LOAD
+            # =========================================
 
-    # ----------------------------------------
-    # PPG amplitude
-    # ----------------------------------------
+            df = pd.read_csv(
+                processed_file
+            )
 
-    ppg_amplitudes = ppg_win[
-        ppg_peaks
-    ]
+            if len(df) < 120:
+                continue
 
-    ppg_amp_mean = np.mean(
-        ppg_amplitudes
-    )
+            # =========================================
+            # SIGNALS
+            # =========================================
 
-    # ----------------------------------------
-    # pulse width
-    # ----------------------------------------
+            time = df[
+                "time_sec"
+            ].values
 
-    pulse_widths = []
+            ecg = df[
+                "ecg_filtered"
+            ].values
 
-    for peak in ppg_peaks:
+            ppg = df[
+                "ppg_filtered"
+            ].values
 
-        half_height = (
-            ppg_win[peak] / 2
-        )
+            accel = df[
+                "accel_magnitude"
+            ].values
 
-        left = peak
-        right = peak
+            gyro = df[
+                "gyro_magnitude"
+            ].values
 
-        while (
-            left > 0 and
-            ppg_win[left] > half_height
-        ):
-            left -= 1
+            temp_signal = df[
+                "temp"
+            ].values
 
-        while (
-            right < len(ppg_win) - 1 and
-            ppg_win[right] > half_height
-        ):
-            right += 1
+            # =========================================
+            # SAMPLING RATE
+            # =========================================
 
-        width = (
-            right - left
-        ) / fs * 1000
+            fs = 1 / np.mean(
+                np.diff(time)
+            )
 
-        pulse_widths.append(width)
+            print(
+                f"fs = {fs:.2f} Hz"
+            )
 
-    pulse_width_mean = np.mean(
-        pulse_widths
-    )
+            # =========================================
+            # REJECT EXTREMELY LOW FS
+            # =========================================
 
-    # ----------------------------------------
-    # motion features
-    # ----------------------------------------
+            if fs < 8:
 
-    accel_motion = np.mean(
-        accel_win
-    )
+                print(
+                    "sampling rate too low"
+                )
 
-    gyro_motion = np.mean(
-        gyro_win
-    )
+                continue
 
-    # ----------------------------------------
-    # temperature
-    # ----------------------------------------
+            # =========================================
+            # SMOOTH SIGNALS
+            # =========================================
 
-    temp_mean = np.mean(
-        temp_win
-    )
+            smooth_window = max(
+                5,
+                int(fs * 0.12)
+            )
 
-    # ----------------------------------------
-    # final feature row
-    # ----------------------------------------
+            if smooth_window % 2 == 0:
+                smooth_window += 1
 
-    feature_row = {
+            ecg = savgol_filter(
+                ecg,
+                smooth_window,
+                3
+            )
 
-        "window_start_sec":
-            t_win[0],
+            ppg = savgol_filter(
+                ppg,
+                smooth_window,
+                3
+            )
 
-        "window_end_sec":
-            t_win[-1],
+            # =========================================
+            # WINDOW SETTINGS
+            # =========================================
 
-        "pat_mean_ms":
-            np.mean(pat_values),
+            window_sec = 6
 
-        "pat_std_ms":
-            np.std(pat_values),
+            step_sec = 3
 
-        "heart_rate_bpm":
-            heart_rate,
+            window_samples = int(
+                window_sec * fs
+            )
 
-        "sdnn":
-            sdnn,
+            step_samples = int(
+                step_sec * fs
+            )
 
-        "rmssd":
-            rmssd,
+            feature_rows = []
 
-        "ppg_amplitude":
-            ppg_amp_mean,
+            # =========================================
+            # WINDOW LOOP
+            # =========================================
 
-        "pulse_width_ms":
-            pulse_width_mean,
+            for start in range(
 
-        "accel_motion":
-            accel_motion,
+                0,
 
-        "gyro_motion":
-            gyro_motion,
+                len(df) - window_samples,
 
-        "temperature":
-            temp_mean
-    }
+                max(1, step_samples)
+            ):
 
-    feature_rows.append(
-        feature_row
-    )
+                end = (
+                    start +
+                    window_samples
+                )
 
-# ----------------------------------------
-# final dataframe
-# ----------------------------------------
+                t_win = time[start:end]
 
-features_df = pd.DataFrame(
-    feature_rows
-)
+                ecg_win = ecg[start:end]
 
-# ----------------------------------------
-# save dataset
-# ----------------------------------------
+                ppg_win = ppg[start:end]
 
-features_df.to_csv(
-    "training_features.csv",
-    index=False
-)
+                accel_win = accel[start:end]
 
-# ----------------------------------------
-# output
-# ----------------------------------------
+                gyro_win = gyro[start:end]
 
-print("\nfeature extraction complete\n")
+                temp_win = temp_signal[start:end]
 
-print(features_df.head())
+                # =====================================
+                # MOTION FILTERING
+                # =====================================
 
-print(
-    f"\nTotal feature rows: "
-    f"{len(features_df)}"
-)
+                accel_std = np.std(
+                    accel_win
+                )
+
+                gyro_std = np.std(
+                    gyro_win
+                )
+
+                if accel_std > 1.5:
+                    continue
+
+                if gyro_std > 1.0:
+                    continue
+
+                # =====================================
+                # SIGNAL QUALITY
+                # =====================================
+
+                if np.std(ecg_win) < 3:
+                    continue
+
+                if np.std(ppg_win) < 5:
+                    continue
+
+                # =====================================
+                # ECG PEAKS
+                # =====================================
+
+                ecg_peaks, _ = find_peaks(
+
+                    ecg_win,
+
+                    distance=max(
+                        1,
+                        int(fs * 0.4)
+                    ),
+
+                    prominence=np.std(
+                        ecg_win
+                    ) * 0.8
+                )
+
+                if len(ecg_peaks) < 3:
+                    continue
+
+                ecg_times = t_win[
+                    ecg_peaks
+                ]
+
+                # =====================================
+                # RR INTERVALS
+                # =====================================
+
+                rr_ms = np.diff(
+                    ecg_times
+                ) * 1000
+
+                rr_ms = rr_ms[
+                    (
+                        rr_ms > 450
+                    ) &
+                    (
+                        rr_ms < 1500
+                    )
+                ]
+
+                if len(rr_ms) < 2:
+                    continue
+
+                # =====================================
+                # REMOVE RR OUTLIERS
+                # =====================================
+
+                rr_med = np.median(
+                    rr_ms
+                )
+
+                rr_ms = rr_ms[
+                    (
+                        rr_ms >
+                        rr_med * 0.7
+                    ) &
+                    (
+                        rr_ms <
+                        rr_med * 1.3
+                    )
+                ]
+
+                if len(rr_ms) < 2:
+                    continue
+
+                # =====================================
+                # HEART RATE
+                # =====================================
+
+                heart_rate = (
+                    60000 /
+                    np.mean(rr_ms)
+                )
+
+                if (
+                    heart_rate < 45 or
+                    heart_rate > 130
+                ):
+                    continue
+
+                # =====================================
+                # HRV
+                # =====================================
+
+                sdnn = np.std(
+                    rr_ms
+                )
+
+                rmssd = np.sqrt(
+
+                    np.mean(
+                        np.diff(rr_ms) ** 2
+                    )
+                )
+
+                if sdnn > 180:
+                    continue
+
+                if rmssd > 250:
+                    continue
+
+                # =====================================
+                # PPG PEAKS
+                # =====================================
+
+                ppg_peaks, _ = find_peaks(
+
+                    ppg_win,
+
+                    distance=max(
+                        1,
+                        int(fs * 0.4)
+                    ),
+
+                    prominence=np.std(
+                        ppg_win
+                    ) * 0.4
+                )
+
+                if len(ppg_peaks) < 3:
+                    continue
+
+                ppg_times = t_win[
+                    ppg_peaks
+                ]
+
+                # =====================================
+                # PAT EXTRACTION
+                # =====================================
+
+                pat_values = []
+
+                used_ppg = set()
+
+                for r_time in ecg_times:
+
+                    valid = np.where(
+
+                        (
+                            ppg_times >
+                            r_time + 0.08
+                        ) &
+
+                        (
+                            ppg_times <
+                            r_time + 0.35
+                        )
+
+                    )[0]
+
+                    if len(valid) == 0:
+                        continue
+
+                    idx = valid[0]
+
+                    if idx in used_ppg:
+                        continue
+
+                    used_ppg.add(idx)
+
+                    pat = (
+
+                        ppg_times[idx] -
+                        r_time
+
+                    ) * 1000
+
+                    if (
+                        80 <= pat <= 300
+                    ):
+                        pat_values.append(
+                            pat
+                        )
+
+                if len(pat_values) < 2:
+                    continue
+
+                pat_values = np.array(
+                    pat_values
+                )
+
+                pat_mean = np.mean(
+                    pat_values
+                )
+
+                pat_std = np.std(
+                    pat_values
+                )
+
+                if pat_std < 0.5:
+                    continue
+
+                if pat_std > 50:
+                    continue
+
+                # =====================================
+                # PPG AMPLITUDE
+                # =====================================
+
+                ppg_amp = (
+                    np.max(ppg_win) -
+                    np.min(ppg_win)
+                )
+
+                if (
+                    ppg_amp < 100 or
+                    ppg_amp > 20000
+                ):
+                    continue
+
+                # =====================================
+                # PULSE WIDTH
+                # =====================================
+
+                pulse_width_ms = (
+                    np.mean(rr_ms) * 0.35
+                )
+
+                if (
+                    pulse_width_ms < 60 or
+                    pulse_width_ms > 450
+                ):
+                    continue
+
+                # =====================================
+                # STORE FEATURES
+                # =====================================
+
+                feature_rows.append({
+
+                    "pat_mean_ms":
+                        float(pat_mean),
+
+                    "pat_std_ms":
+                        float(pat_std),
+
+                    "heart_rate_bpm":
+                        float(heart_rate),
+
+                    "sdnn":
+                        float(sdnn),
+
+                    "rmssd":
+                        float(rmssd),
+
+                    "ppg_amplitude":
+                        float(ppg_amp),
+
+                    "pulse_width_ms":
+                        float(
+                            pulse_width_ms
+                        ),
+
+                    "accel_motion":
+                        float(
+                            np.mean(
+                                accel_win
+                            )
+                        ),
+
+                    "gyro_motion":
+                        float(
+                            np.mean(
+                                gyro_win
+                            )
+                        ),
+
+                    "temperature":
+                        float(
+                            np.mean(
+                                temp_win
+                            )
+                        )
+                })
+
+            # =========================================
+            # SAVE
+            # =========================================
+
+            features_df = pd.DataFrame(
+                feature_rows
+            )
+
+            # =========================================
+            # REMOVE DUPLICATES
+            # =========================================
+
+            features_df = (
+                features_df
+                .drop_duplicates()
+            )
+
+            if len(features_df) == 0:
+
+                print(
+                    "no valid rows"
+                )
+
+                continue
+
+            output_file = (
+
+                output_dir /
+
+                f"features_{processed_file.name}"
+            )
+
+            features_df.to_csv(
+                output_file,
+                index=False
+            )
+
+            print(
+                f"saved "
+                f"{len(features_df)} rows"
+            )
+
+        except Exception as e:
+
+            print(
+                f"failed: "
+                f"{processed_file.name}"
+            )
+
+            print(e)
+
+print("\n================================")
+print("feature extraction complete")
+print("================================")
