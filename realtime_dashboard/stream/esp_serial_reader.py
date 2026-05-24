@@ -3,52 +3,47 @@ import json
 import time
 
 # =====================================================
-# CONFIG
-# =====================================================
-
-SERIAL_PORT = "COM5"
-
-BAUD_RATE = 921600
-
-# =====================================================
 # CONNECT
 # =====================================================
 
-print("\nconnecting to ESP32...\n")
+def connect_serial(
 
-ser = serial.Serial(
+    port="COM5",
 
-    SERIAL_PORT,
+    baud_rate=921600
+):
 
-    BAUD_RATE,
+    print(
+        "\nconnecting to ESP32...\n"
+    )
 
-    timeout=1
-)
+    ser = serial.Serial(
 
-time.sleep(2)
+        port,
 
-print("connected\n")
+        baud_rate,
+
+        timeout=1
+    )
+
+    time.sleep(2)
+
+    print("connected\n")
+
+    return ser
 
 # =====================================================
-# READ LOOP
+# READ SENSOR PACKET
 # =====================================================
 
-while True:
+def read_sensor_packet(ser):
 
     try:
-
-        # =============================================
-        # READ LINE
-        # =============================================
 
         raw_line = ser.readline()
 
         if not raw_line:
-            continue
-
-        # =============================================
-        # DECODE
-        # =============================================
+            return None
 
         line = raw_line.decode(
 
@@ -59,53 +54,51 @@ while True:
         ).strip()
 
         if len(line) == 0:
-            continue
-
-        # =============================================
-        # PARSE JSON
-        # =============================================
+            return None
 
         data = json.loads(line)
 
-        # =============================================
-        # ACCESS VALUES
-        # =============================================
+        required_keys = [
 
-        timestamp = data["timestamp"]
+            "timestamp",
 
-        ecg = data["ecg"]
+            "ecg",
 
-        ir = data["ir"]
+            "ir",
 
-        temp = data["temp"]
+            "red",
 
-        # =============================================
-        # PRINT
-        # =============================================
+            "temp",
 
-        print(
-            f"ECG: {ecg} | "
-            f"IR: {ir} | "
-            f"Temp: {temp}"
-        )
+            "accX",
+
+            "accY",
+
+            "accZ",
+
+            "gyroX",
+
+            "gyroY",
+
+            "gyroZ"
+        ]
+
+        for key in required_keys:
+
+            if key not in data:
+                return None
+
+        return data
 
     except json.JSONDecodeError:
 
-        print(
-            "invalid json packet"
-        )
-
-    except KeyboardInterrupt:
-
-        print("\nstopped")
-
-        ser.close()
-
-        break
+        return None
 
     except Exception as e:
 
         print(
-            "error:",
+            "serial read error:",
             e
         )
+
+        return None

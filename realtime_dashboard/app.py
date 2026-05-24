@@ -10,7 +10,9 @@ from collections import deque
 # =====================================================
 
 from stream.esp_serial_reader import (
+
     connect_serial,
+
     read_sensor_packet
 )
 
@@ -41,8 +43,12 @@ st.set_page_config(
     layout="wide"
 )
 
+# =====================================================
+# TITLE
+# =====================================================
+
 st.title(
-    "Realtime Blood Pressure Monitoring"
+    "Realtime Biomedical Dashboard"
 )
 
 # =====================================================
@@ -53,7 +59,7 @@ st.sidebar.title("Settings")
 
 model_choice = st.sidebar.selectbox(
 
-    "Model",
+    "Prediction Model",
 
     [
 
@@ -73,29 +79,87 @@ serial_port = st.sidebar.text_input(
 )
 
 start_button = st.sidebar.button(
-    "Start Streaming"
+    "Start Monitoring"
 )
 
 # =====================================================
-# PLACEHOLDERS
+# TOP METRICS
 # =====================================================
 
-bp_placeholder = st.empty()
+metric_col1, metric_col2, metric_col3 = (
+    st.columns(3)
+)
 
-status_placeholder = st.empty()
+metric_col4, metric_col5 = (
+    st.columns(2)
+)
+
+hr_metric = metric_col1.empty()
+
+spo2_metric = metric_col2.empty()
+
+temp_metric = metric_col3.empty()
+
+bp_metric = metric_col4.empty()
+
+status_metric = metric_col5.empty()
+
+# =====================================================
+# ECG CHART
+# =====================================================
+
+st.subheader("ECG Waveform")
+
+ecg_chart_placeholder = st.empty()
+
+# =====================================================
+# PPG CHART
+# =====================================================
+
+st.subheader("PPG Waveform")
+
+ppg_chart_placeholder = st.empty()
+
+# =====================================================
+# MOTION CHARTS
+# =====================================================
+
+motion_col1, motion_col2 = (
+    st.columns(2)
+)
+
+motion_col1.subheader(
+    "Accelerometer"
+)
+
+motion_col2.subheader(
+    "Gyroscope"
+)
+
+accel_chart_placeholder = (
+    motion_col1.empty()
+)
+
+gyro_chart_placeholder = (
+    motion_col2.empty()
+)
+
+# =====================================================
+# FEATURE TABLE
+# =====================================================
+
+st.subheader("Extracted Features")
 
 feature_placeholder = st.empty()
 
-chart_placeholder = st.empty()
-
 # =====================================================
-# START
+# START STREAMING
 # =====================================================
 
 if start_button:
 
     # =============================================
-    # SERIAL
+    # SERIAL CONNECTION
     # =============================================
 
     ser = connect_serial(
@@ -109,7 +173,7 @@ if start_button:
     # BUFFER
     # =============================================
 
-    buffer = SignalBuffer(
+    signal_buffer = SignalBuffer(
 
         window_seconds=8,
 
@@ -128,138 +192,258 @@ if start_button:
         maxlen=1000
     )
 
+    accel_chart = deque(
+        maxlen=1000
+    )
+
+    gyro_chart = deque(
+        maxlen=1000
+    )
+
     # =============================================
     # LOOP
     # =============================================
 
     while True:
 
-        # =========================================
-        # READ SENSOR PACKET
-        # =========================================
+        try:
 
-        sample = read_sensor_packet(
-            ser
-        )
+            # =====================================
+            # READ SAMPLE
+            # =====================================
 
-        if sample is None:
-            continue
+            sample = read_sensor_packet(
+                ser
+            )
 
-        # =========================================
-        # UPDATE BUFFER
-        # =========================================
+            if sample is None:
+                continue
 
-        buffer.add_sample(sample)
+            # =====================================
+            # UPDATE BUFFER
+            # =====================================
 
-        # =========================================
-        # UPDATE CHART DATA
-        # =========================================
+            signal_buffer.add_sample(
+                sample
+            )
 
-        ecg_chart.append(
-            sample["ecg"]
-        )
+            # =====================================
+            # UPDATE CHARTS
+            # =====================================
 
-        ppg_chart.append(
-            sample["ir"]
-        )
+            ecg_chart.append(
+                sample["ecg"]
+            )
 
-        # =========================================
-        # WAIT FOR FULL WINDOW
-        # =========================================
+            ppg_chart.append(
+                sample["ir"]
+            )
 
-        if not buffer.is_ready():
-            continue
+            accel_mag = np.sqrt(
 
-        # =========================================
-        # GET WINDOW
-        # =========================================
+                sample["accX"]**2 +
 
-        window = buffer.get_window()
+                sample["accY"]**2 +
 
-        # =========================================
-        # FILTER
-        # =========================================
+                sample["accZ"]**2
+            )
 
-        processed = process_window(
-            window
-        )
+            gyro_mag = np.sqrt(
 
-        if processed is None:
-            continue
+                sample["gyroX"]**2 +
 
-        # =========================================
-        # FEATURES
-        # =========================================
+                sample["gyroY"]**2 +
 
-        features = extract_features(
-            processed
-        )
+                sample["gyroZ"]**2
+            )
 
-        if features is None:
-            continue
+            accel_chart.append(
+                accel_mag
+            )
 
-        # =========================================
-        # PREDICT BP
-        # =========================================
+            gyro_chart.append(
+                gyro_mag
+            )
 
-        prediction = predict_bp(
+            # =====================================
+            # WAIT FOR FULL WINDOW
+            # =====================================
 
-            features,
+            if not signal_buffer.is_ready():
+                continue
 
-            model_type=model_choice
-        )
+            # =====================================
+            # GET WINDOW
+            # =====================================
 
-        if prediction is None:
-            continue
+            window = signal_buffer.get_window()
 
-        # =========================================
-        # DISPLAY BP
-        # =========================================
+            # =====================================
+            # PROCESS WINDOW
+            # =====================================
 
-        bp_placeholder.metric(
+            processed = process_window(
+                window
+            )
 
-            "Estimated Blood Pressure",
+            if processed is None:
+                continue
 
-            f"{prediction['sbp']} / "
-            f"{prediction['dbp']} mmHg"
-        )
+            # =====================================
+            # EXTRACT FEATURES
+            # =====================================
 
-        # =========================================
-        # STATUS
-        # =========================================
+            features = extract_features(
+                processed
+            )
 
-        status_placeholder.success(
+            if features is None:
+                continue
 
-            f"Status: "
-            f"{prediction['status']}"
-        )
+            # =====================================
+            # PREDICT BP
+            # =====================================
 
-        # =========================================
-        # FEATURES TABLE
-        # =========================================
+            prediction = predict_bp(
 
-        feature_df = pd.DataFrame(
+                features,
 
-            [features]
-        )
+                model_type=model_choice
+            )
 
-        feature_placeholder.dataframe(
-            feature_df
-        )
+            if prediction is None:
+                continue
 
-        # =========================================
-        # CHARTS
-        # =========================================
+            # =====================================
+            # HEART RATE
+            # =====================================
 
-        chart_df = pd.DataFrame({
+            hr_metric.metric(
 
-            "ECG":
-                list(ecg_chart),
+                "Heart Rate",
 
-            "PPG":
-                list(ppg_chart)
-        })
+                f"{features['heart_rate_bpm']:.1f} BPM"
+            )
 
-        chart_placeholder.line_chart(
-            chart_df
-        )
+            # =====================================
+            # SPO2
+            # =====================================
+
+            # placeholder estimation
+
+            fake_spo2 = 98
+
+            spo2_metric.metric(
+
+                "SpO2",
+
+                f"{fake_spo2}%"
+            )
+
+            # =====================================
+            # TEMP
+            # =====================================
+
+            temp_metric.metric(
+
+                "Temperature",
+
+                f"{features['temperature']:.1f} °C"
+            )
+
+            # =====================================
+            # BP
+            # =====================================
+
+            bp_metric.metric(
+
+                "Blood Pressure",
+
+                f"{prediction['sbp']} / "
+                f"{prediction['dbp']} mmHg"
+            )
+
+            # =====================================
+            # STATUS
+            # =====================================
+
+            status_metric.metric(
+
+                "Status",
+
+                prediction["status"]
+            )
+
+            # =====================================
+            # ECG CHART
+            # =====================================
+
+            ecg_df = pd.DataFrame({
+
+                "ECG":
+                    list(ecg_chart)
+            })
+
+            ecg_chart_placeholder.line_chart(
+                ecg_df
+            )
+
+            # =====================================
+            # PPG CHART
+            # =====================================
+
+            ppg_df = pd.DataFrame({
+
+                "PPG":
+                    list(ppg_chart)
+            })
+
+            ppg_chart_placeholder.line_chart(
+                ppg_df
+            )
+
+            # =====================================
+            # ACCEL CHART
+            # =====================================
+
+            accel_df = pd.DataFrame({
+
+                "Accel":
+                    list(accel_chart)
+            })
+
+            accel_chart_placeholder.line_chart(
+                accel_df
+            )
+
+            # =====================================
+            # GYRO CHART
+            # =====================================
+
+            gyro_df = pd.DataFrame({
+
+                "Gyro":
+                    list(gyro_chart)
+            })
+
+            gyro_chart_placeholder.line_chart(
+                gyro_df
+            )
+
+            # =====================================
+            # FEATURES TABLE
+            # =====================================
+
+            feature_df = pd.DataFrame(
+                [features]
+            )
+
+            feature_placeholder.dataframe(
+                feature_df
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"runtime error: {e}"
+            )
