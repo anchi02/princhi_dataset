@@ -15,16 +15,16 @@ def extract_features(
 
     try:
 
+        # =============================================
+        # SIGNALS
+        # =============================================
+
         ecg = processed_window[
             "ecg_filtered"
         ]
 
         ppg = processed_window[
             "ppg_filtered"
-        ]
-
-        red_signal = processed_window[
-            "red_filtered"
         ]
 
         accel = processed_window[
@@ -44,7 +44,7 @@ def extract_features(
         ]
 
         # =============================================
-        # QUALITY
+        # SIGNAL QUALITY
         # =============================================
 
         if np.std(ecg) < 5:
@@ -68,6 +68,10 @@ def extract_features(
 
         if len(ecg_peaks) < 5:
             return None
+
+        # =============================================
+        # ECG TIMES
+        # =============================================
 
         ecg_times = (
 
@@ -103,6 +107,12 @@ def extract_features(
             np.mean(rr_ms)
         )
 
+        if (
+            heart_rate < 45 or
+            heart_rate > 140
+        ):
+            return None
+
         # =============================================
         # HRV
         # =============================================
@@ -133,6 +143,10 @@ def extract_features(
 
         if len(ppg_peaks) < 5:
             return None
+
+        # =============================================
+        # PPG TIMES
+        # =============================================
 
         ppg_times = (
 
@@ -243,51 +257,10 @@ def extract_features(
         )
 
         # =============================================
-        # REAL SpO2
-        # =============================================
-
-        dc_red = np.mean(
-            red_signal
-        )
-
-        dc_ir = np.mean(
-            ppg
-        )
-
-        ac_red = np.std(
-            red_signal
-        )
-
-        ac_ir = np.std(
-            ppg
-        )
-
-        if dc_red == 0 or dc_ir == 0:
-
-            spo2 = 0
-
-        else:
-
-            ratio = (
-
-                (ac_red / dc_red) /
-
-                (ac_ir / dc_ir)
-            )
-
-            spo2 = 110 - (25 * ratio)
-
-        spo2 = np.clip(
-            spo2,
-            70,
-            100
-        )
-
-        # =============================================
         # FINAL FEATURES
         # =============================================
 
-        return {
+        features = {
 
             "pat_mean_ms":
                 float(pat_mean),
@@ -297,9 +270,6 @@ def extract_features(
 
             "heart_rate_bpm":
                 float(heart_rate),
-
-            "spo2":
-                float(spo2),
 
             "sdnn":
                 float(sdnn),
@@ -331,6 +301,8 @@ def extract_features(
                 )
         }
 
+        return features
+
     except Exception as e:
 
         print(
@@ -339,3 +311,65 @@ def extract_features(
         )
 
         return None
+
+# =====================================================
+# TEST
+# =====================================================
+
+if __name__ == "__main__":
+
+    fs = 250
+
+    t = np.linspace(
+
+        0,
+
+        8,
+
+        fs * 8
+    )
+
+    ecg = (
+
+        np.sin(
+            2 * np.pi * 1.2 * t
+        ) * 1000
+    )
+
+    ppg = (
+
+        np.sin(
+            2 * np.pi * 1.2 * (t - 0.2)
+        ) * 5000
+    )
+
+    fake_processed = {
+
+        "timestamp":
+            np.arange(
+                len(t)
+            ) * 4000,
+
+        "ecg_filtered":
+            ecg,
+
+        "ppg_filtered":
+            ppg,
+
+        "accel_magnitude":
+            np.ones(len(t)) * 9.8,
+
+        "gyro_magnitude":
+            np.ones(len(t)) * 0.04,
+
+        "temperature":
+            np.ones(len(t)) * 33.5
+    }
+
+    features = extract_features(
+        fake_processed
+    )
+
+    print("\nfeatures:\n")
+
+    print(features)
