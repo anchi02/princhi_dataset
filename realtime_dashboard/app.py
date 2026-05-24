@@ -166,7 +166,7 @@ if start_button:
 
         port=serial_port,
 
-        baud_rate=921600
+        baud_rate=115200
     )
 
     # =============================================
