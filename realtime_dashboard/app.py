@@ -326,14 +326,18 @@ if start_button:
             )
 
             # =====================================
-            # REAL SPO2
+            # SPO2
             # =====================================
+
+            # placeholder estimation
+
+            fake_spo2 = 98
 
             spo2_metric.metric(
 
                 "SpO2",
 
-                f"{features['spo2']:.1f}%"
+                f"{fake_spo2}%"
             )
 
             # =====================================

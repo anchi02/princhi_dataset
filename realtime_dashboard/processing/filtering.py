@@ -169,7 +169,7 @@ def normalize_signal(signal):
     ) / std
 
 # =====================================================
-# MAGNITUDES
+# ACCEL MAGNITUDE
 # =====================================================
 
 def accel_magnitude(
@@ -190,6 +190,10 @@ def accel_magnitude(
         accZ**2
     )
 
+# =====================================================
+# GYRO MAGNITUDE
+# =====================================================
+
 def gyro_magnitude(
 
     gyroX,
@@ -209,7 +213,7 @@ def gyro_magnitude(
     )
 
 # =====================================================
-# FULL PROCESSING
+# FULL REALTIME PROCESSING
 # =====================================================
 
 def process_window(
@@ -221,10 +225,6 @@ def process_window(
 
     try:
 
-        # =============================================
-        # FILTER
-        # =============================================
-
         ecg_filtered = filter_ecg(
 
             window["ecg"],
@@ -232,39 +232,20 @@ def process_window(
             fs
         )
 
-        ir_filtered = filter_ppg(
+        ppg_filtered = filter_ppg(
 
             window["ir"],
 
             fs
         )
 
-        red_filtered = filter_ppg(
-
-            window["red"],
-
-            fs
-        )
-
-        # =============================================
-        # NORMALIZE
-        # =============================================
-
         ecg_norm = normalize_signal(
             ecg_filtered
         )
 
-        ir_norm = normalize_signal(
-            ir_filtered
+        ppg_norm = normalize_signal(
+            ppg_filtered
         )
-
-        red_norm = normalize_signal(
-            red_filtered
-        )
-
-        # =============================================
-        # MOTION
-        # =============================================
 
         accel_mag = accel_magnitude(
 
@@ -293,19 +274,13 @@ def process_window(
                 ecg_filtered,
 
             "ppg_filtered":
-                ir_filtered,
-
-            "red_filtered":
-                red_filtered,
+                ppg_filtered,
 
             "ecg_norm":
                 ecg_norm,
 
             "ppg_norm":
-                ir_norm,
-
-            "red_norm":
-                red_norm,
+                ppg_norm,
 
             "accel_magnitude":
                 accel_mag,
@@ -325,3 +300,78 @@ def process_window(
         )
 
         return None
+
+# =====================================================
+# TEST
+# =====================================================
+
+if __name__ == "__main__":
+
+    fs = 250
+
+    t = np.linspace(
+
+        0,
+
+        8,
+
+        fs * 8
+    )
+
+    fake_ecg = (
+
+        np.sin(
+
+            2 * np.pi * 1.2 * t
+        ) * 1000
+    )
+
+    fake_ppg = (
+
+        np.sin(
+
+            2 * np.pi * 1.2 * t
+        ) * 5000
+    )
+
+    fake_window = {
+
+        "timestamp": t,
+
+        "ecg": fake_ecg,
+
+        "ir": fake_ppg,
+
+        "accX":
+            np.random.randn(len(t)),
+
+        "accY":
+            np.random.randn(len(t)),
+
+        "accZ":
+            np.random.randn(len(t)),
+
+        "gyroX":
+            np.random.randn(len(t)),
+
+        "gyroY":
+            np.random.randn(len(t)),
+
+        "gyroZ":
+            np.random.randn(len(t)),
+
+        "temp":
+            np.ones(len(t)) * 33.5
+    }
+
+    processed = process_window(
+        fake_window
+    )
+
+    print(
+        "processed keys:"
+    )
+
+    print(
+        processed.keys()
+    )
