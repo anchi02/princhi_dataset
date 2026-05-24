@@ -27,6 +27,10 @@ def extract_features(
             "ppg_filtered"
         ]
 
+        red = processed_window[
+            "red_filtered"
+        ]
+
         accel = processed_window[
             "accel_magnitude"
         ]
@@ -44,16 +48,6 @@ def extract_features(
         ]
 
         # =============================================
-        # SIGNAL QUALITY
-        # =============================================
-
-        if np.std(ecg) < 5:
-            return None
-
-        if np.std(ppg) < 20:
-            return None
-
-        # =============================================
         # ECG PEAKS
         # =============================================
 
@@ -69,16 +63,16 @@ def extract_features(
         if len(ecg_peaks) < 5:
             return None
 
-        # =============================================
-        # ECG TIMES
-        # =============================================
-
         ecg_times = (
 
             timestamps[ecg_peaks] -
             timestamps[0]
 
         ) / 1_000_000
+
+        # =============================================
+        # RR INTERVALS
+        # =============================================
 
         rr_ms = np.diff(
             ecg_times
@@ -93,7 +87,7 @@ def extract_features(
             )
         ]
 
-        if len(rr_ms) < 4:
+        if len(rr_ms) < 3:
             return None
 
         # =============================================
@@ -106,12 +100,6 @@ def extract_features(
 
             np.mean(rr_ms)
         )
-
-        if (
-            heart_rate < 45 or
-            heart_rate > 140
-        ):
-            return None
 
         # =============================================
         # HRV
@@ -143,10 +131,6 @@ def extract_features(
 
         if len(ppg_peaks) < 5:
             return None
-
-        # =============================================
-        # PPG TIMES
-        # =============================================
 
         ppg_times = (
 
@@ -237,30 +221,43 @@ def extract_features(
         )
 
         # =============================================
-        # MOTION
+        # REAL SpO2
         # =============================================
 
-        accel_motion = np.mean(
-            accel
-        )
+        dc_red = np.mean(red)
 
-        gyro_motion = np.mean(
-            gyro
-        )
+        dc_ir = np.mean(ppg)
 
-        # =============================================
-        # TEMPERATURE
-        # =============================================
+        ac_red = np.std(red)
 
-        temperature = np.mean(
-            temp
+        ac_ir = np.std(ppg)
+
+        if dc_red == 0 or dc_ir == 0:
+
+            spo2 = 0
+
+        else:
+
+            ratio = (
+
+                (ac_red / dc_red) /
+
+                (ac_ir / dc_ir)
+            )
+
+            spo2 = 110 - (25 * ratio)
+
+        spo2 = np.clip(
+            spo2,
+            70,
+            100
         )
 
         # =============================================
         # FINAL FEATURES
         # =============================================
 
-        features = {
+        return {
 
             "pat_mean_ms":
                 float(pat_mean),
@@ -270,6 +267,9 @@ def extract_features(
 
             "heart_rate_bpm":
                 float(heart_rate),
+
+            "spo2":
+                float(spo2),
 
             "sdnn":
                 float(sdnn),
@@ -287,21 +287,19 @@ def extract_features(
 
             "accel_motion":
                 float(
-                    accel_motion
+                    np.mean(accel)
                 ),
 
             "gyro_motion":
                 float(
-                    gyro_motion
+                    np.mean(gyro)
                 ),
 
             "temperature":
                 float(
-                    temperature
+                    np.mean(temp)
                 )
         }
-
-        return features
 
     except Exception as e:
 
@@ -311,65 +309,3 @@ def extract_features(
         )
 
         return None
-
-# =====================================================
-# TEST
-# =====================================================
-
-if __name__ == "__main__":
-
-    fs = 250
-
-    t = np.linspace(
-
-        0,
-
-        8,
-
-        fs * 8
-    )
-
-    ecg = (
-
-        np.sin(
-            2 * np.pi * 1.2 * t
-        ) * 1000
-    )
-
-    ppg = (
-
-        np.sin(
-            2 * np.pi * 1.2 * (t - 0.2)
-        ) * 5000
-    )
-
-    fake_processed = {
-
-        "timestamp":
-            np.arange(
-                len(t)
-            ) * 4000,
-
-        "ecg_filtered":
-            ecg,
-
-        "ppg_filtered":
-            ppg,
-
-        "accel_magnitude":
-            np.ones(len(t)) * 9.8,
-
-        "gyro_magnitude":
-            np.ones(len(t)) * 0.04,
-
-        "temperature":
-            np.ones(len(t)) * 33.5
-    }
-
-    features = extract_features(
-        fake_processed
-    )
-
-    print("\nfeatures:\n")
-
-    print(features)
