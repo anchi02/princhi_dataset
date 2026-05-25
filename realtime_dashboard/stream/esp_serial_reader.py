@@ -8,9 +8,9 @@ import time
 
 def connect_serial(
 
-    port="COM5",
+    port="COM7",
 
-    baud_rate=921600
+    baud_rate=115200
 ):
 
     print(
@@ -26,24 +26,53 @@ def connect_serial(
         timeout=1
     )
 
+    # =============================================
+    # WAIT FOR ESP RESET
+    # =============================================
+
     time.sleep(2)
 
-    print("connected\n")
+    # =============================================
+    # CLEAR BUFFER
+    # =============================================
+
+    ser.reset_input_buffer()
+
+    print(
+        "connected\n"
+    )
 
     return ser
 
 # =====================================================
-# READ SENSOR PACKET
+# READ PACKET
 # =====================================================
 
 def read_sensor_packet(ser):
 
     try:
 
+        # =========================================
+        # NO DATA
+        # =========================================
+
+        if ser.in_waiting == 0:
+
+            return None
+
+        # =========================================
+        # READ LINE
+        # =========================================
+
         raw_line = ser.readline()
 
         if not raw_line:
+
             return None
+
+        # =========================================
+        # DECODE
+        # =========================================
 
         line = raw_line.decode(
 
@@ -53,44 +82,47 @@ def read_sensor_packet(ser):
 
         ).strip()
 
+        # =========================================
+        # EMPTY
+        # =========================================
+
         if len(line) == 0:
+
             return None
 
+        # =========================================
+        # DEBUG RAW JSON
+        # =========================================
+
+        print("\nRAW LINE:")
+
+        print(line)
+
+        # =========================================
+        # MUST LOOK LIKE JSON
+        # =========================================
+
+        if not line.startswith("{"):
+
+            return None
+
+        if not line.endswith("}"):
+
+            return None
+
+        # =========================================
+        # JSON PARSE
+        # =========================================
+
         data = json.loads(line)
-
-        required_keys = [
-
-            "timestamp",
-
-            "ecg",
-
-            "ir",
-
-            "red",
-
-            "temp",
-
-            "accX",
-
-            "accY",
-
-            "accZ",
-
-            "gyroX",
-
-            "gyroY",
-
-            "gyroZ"
-        ]
-
-        for key in required_keys:
-
-            if key not in data:
-                return None
 
         return data
 
     except json.JSONDecodeError:
+
+        print(
+            "json decode failed"
+        )
 
         return None
 

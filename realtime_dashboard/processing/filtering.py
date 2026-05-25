@@ -104,7 +104,7 @@ def filter_ecg(
 
     ecg_signal,
 
-    fs=250
+    fs=100
 ):
 
     return apply_bandpass(
@@ -113,7 +113,7 @@ def filter_ecg(
 
         lowcut=0.5,
 
-        highcut=40,
+        highcut=30,
 
         fs=fs,
 
@@ -128,7 +128,7 @@ def filter_ppg(
 
     ppg_signal,
 
-    fs=250
+    fs=100
 ):
 
     return apply_bandpass(
@@ -137,7 +137,7 @@ def filter_ppg(
 
         lowcut=0.5,
 
-        highcut=8,
+        highcut=6,
 
         fs=fs,
 
@@ -213,14 +213,14 @@ def gyro_magnitude(
     )
 
 # =====================================================
-# FULL REALTIME PROCESSING
+# PROCESS WINDOW
 # =====================================================
 
 def process_window(
 
     window,
 
-    fs=250
+    fs=100
 ):
 
     try:
@@ -300,78 +300,3 @@ def process_window(
         )
 
         return None
-
-# =====================================================
-# TEST
-# =====================================================
-
-if __name__ == "__main__":
-
-    fs = 250
-
-    t = np.linspace(
-
-        0,
-
-        8,
-
-        fs * 8
-    )
-
-    fake_ecg = (
-
-        np.sin(
-
-            2 * np.pi * 1.2 * t
-        ) * 1000
-    )
-
-    fake_ppg = (
-
-        np.sin(
-
-            2 * np.pi * 1.2 * t
-        ) * 5000
-    )
-
-    fake_window = {
-
-        "timestamp": t,
-
-        "ecg": fake_ecg,
-
-        "ir": fake_ppg,
-
-        "accX":
-            np.random.randn(len(t)),
-
-        "accY":
-            np.random.randn(len(t)),
-
-        "accZ":
-            np.random.randn(len(t)),
-
-        "gyroX":
-            np.random.randn(len(t)),
-
-        "gyroY":
-            np.random.randn(len(t)),
-
-        "gyroZ":
-            np.random.randn(len(t)),
-
-        "temp":
-            np.ones(len(t)) * 33.5
-    }
-
-    processed = process_window(
-        fake_window
-    )
-
-    print(
-        "processed keys:"
-    )
-
-    print(
-        processed.keys()
-    )

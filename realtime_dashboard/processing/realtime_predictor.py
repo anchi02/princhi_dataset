@@ -8,7 +8,9 @@ from pathlib import Path
 # MODEL PATHS
 # =====================================================
 
-MODEL_DIR = Path("../models")
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+MODEL_DIR = BASE_DIR / "models"
 
 # =====================================================
 # LOAD MODELS
